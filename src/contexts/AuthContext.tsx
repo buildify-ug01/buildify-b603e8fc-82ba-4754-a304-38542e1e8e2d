@@ -67,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchUserData = async (authUser: User) => {
     try {
       const { data, error } = await supabase
-        .from('users')
+        .from('profiles')
         .select('*')
         .eq('id', authUser.id)
         .single();
@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data) {
         setUser({
           id: data.id,
-          email: data.email,
+          email: authUser.email || '',
           name: data.name,
           role: data.role
         });
@@ -117,35 +117,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       
-      // Create auth user
+      // Create auth user with metadata
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            name: name
+          }
+        }
       });
 
       if (authError) {
         throw authError;
       }
 
-      if (authData.user) {
-        // Create user profile
-        const { error: profileError } = await supabase
-          .from('users')
-          .insert([
-            { 
-              id: authData.user.id, 
-              email, 
-              name,
-              role: 'user' 
-            }
-          ]);
-
-        if (profileError) {
-          throw profileError;
-        }
-
-        toast.success('Account created successfully');
-      }
+      // The profile will be created automatically by the database trigger
+      toast.success('Account created successfully');
     } catch (error: any) {
       toast.error(error.message || 'Error creating account');
       throw error;

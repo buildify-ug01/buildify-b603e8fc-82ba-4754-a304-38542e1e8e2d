@@ -80,7 +80,7 @@ const AdminPage = () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('users')
+        .from('profiles')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -194,7 +194,7 @@ const AdminPage = () => {
 
     try {
       const { error } = await supabase
-        .from('users')
+        .from('profiles')
         .update({ role: newRole })
         .eq('id', userId);
 
