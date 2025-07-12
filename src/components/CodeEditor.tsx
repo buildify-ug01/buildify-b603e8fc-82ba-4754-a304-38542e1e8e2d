@@ -1,9 +1,9 @@
 
 import { useState } from 'react';
 import { Button } from './ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
 import { File, Folder } from 'lucide-react';
+import Editor from '@monaco-editor/react';
 
 interface CodeFile {
   path: string;
@@ -41,9 +41,36 @@ const CodeEditor = ({ files, activeFile, setActiveFile, updateFileContent }: Cod
     }
   };
 
-  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (activeFile) {
-      updateFileContent(activeFile, e.target.value);
+  const getLanguage = (path: string) => {
+    const extension = path.split('.').pop()?.toLowerCase();
+    
+    switch (extension) {
+      case 'js':
+        return 'javascript';
+      case 'jsx':
+        return 'javascript';
+      case 'ts':
+        return 'typescript';
+      case 'tsx':
+        return 'typescript';
+      case 'css':
+        return 'css';
+      case 'scss':
+        return 'scss';
+      case 'html':
+        return 'html';
+      case 'json':
+        return 'json';
+      case 'md':
+        return 'markdown';
+      default:
+        return 'plaintext';
+    }
+  };
+
+  const handleContentChange = (value: string | undefined) => {
+    if (activeFile && value !== undefined) {
+      updateFileContent(activeFile, value);
     }
   };
 
@@ -117,12 +144,21 @@ const CodeEditor = ({ files, activeFile, setActiveFile, updateFileContent }: Cod
             <div className="p-2 border-b bg-gray-100 text-sm font-medium">
               {activeFile}
             </div>
-            <textarea
-              className="flex-1 p-4 font-mono text-sm resize-none outline-none"
-              value={files.find(f => f.path === activeFile)?.content || ''}
-              onChange={handleContentChange}
-              spellCheck={false}
-            />
+            <div className="flex-1">
+              <Editor
+                height="100%"
+                language={getLanguage(activeFile)}
+                value={files.find(f => f.path === activeFile)?.content || ''}
+                onChange={handleContentChange}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  wordWrap: 'on',
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                }}
+              />
+            </div>
           </>
         ) : (
           <div className="flex items-center justify-center h-full text-gray-500">

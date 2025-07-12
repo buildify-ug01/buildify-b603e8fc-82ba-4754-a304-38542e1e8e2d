@@ -141,7 +141,7 @@ const ProjectPage = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabase.auth.getSession()}`
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
         },
         body: JSON.stringify({
           prompt,
@@ -189,14 +189,15 @@ const ProjectPage = () => {
     ));
   };
 
-  const downloadProject = () => {
+  const downloadProject = async () => {
     if (!files.length) {
       toast.error('No files to download');
       return;
     }
 
-    // Create a zip file using JSZip
-    import('jszip').then(({ default: JSZip }) => {
+    try {
+      // Dynamically import JSZip
+      const JSZip = (await import('jszip')).default;
       const zip = new JSZip();
       
       // Add all files to the zip
@@ -205,21 +206,21 @@ const ProjectPage = () => {
       });
       
       // Generate the zip file
-      zip.generateAsync({ type: 'blob' }).then(content => {
-        // Create a download link
-        const url = URL.createObjectURL(content);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${project?.name || 'project'}.zip`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      });
-    }).catch(err => {
+      const content = await zip.generateAsync({ type: 'blob' });
+      
+      // Create a download link
+      const url = URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${project?.name || 'project'}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
       toast.error('Failed to download project');
       console.error('Error downloading project:', err);
-    });
+    }
   };
 
   if (loading) {
@@ -280,7 +281,7 @@ const ProjectPage = () => {
               </>
             )}
           </Button>
-          <Button onClick={downloadProject}>
+          <Button onClick={() => downloadProject()}>
             <Download className="mr-2 h-4 w-4" />
             Download
           </Button>
