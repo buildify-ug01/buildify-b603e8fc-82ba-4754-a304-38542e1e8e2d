@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import DashboardLayout from '../components/DashboardLayout';
@@ -31,9 +31,9 @@ const DashboardPage = () => {
 
   useEffect(() => {
     fetchProjects();
-  }, [user]);
+  }, [fetchProjects]);
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -55,9 +55,9 @@ const DashboardPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, supabase]);
 
-  const createProject = async () => {
+  const createProject = useCallback(async () => {
     if (!user) return;
     if (!newProjectName.trim()) {
       toast.error('Project name is required');
@@ -74,7 +74,7 @@ const DashboardPage = () => {
             name: newProjectName.trim(),
             description: newProjectDescription.trim() || null,
             status: 'draft',
-            code_content: {}
+            code_content: { files: [] }
           }
         ])
         .select()
@@ -101,9 +101,9 @@ const DashboardPage = () => {
     } finally {
       setIsCreating(false);
     }
-  };
+  }, [user, newProjectName, newProjectDescription, supabase, navigate, fetchProjects]);
 
-  const deleteProject = async (projectId: string) => {
+  const deleteProject = useCallback(async (projectId: string) => {
     if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
       return;
     }
@@ -119,12 +119,12 @@ const DashboardPage = () => {
       }
 
       toast.success('Project deleted successfully');
-      setProjects(projects.filter(project => project.id !== projectId));
+      setProjects(prevProjects => prevProjects.filter(project => project.id !== projectId));
     } catch (error: any) {
       toast.error('Failed to delete project');
       console.error('Error deleting project:', error.message);
     }
-  };
+  }, [supabase]);
 
   return (
     <DashboardLayout>

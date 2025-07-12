@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import DashboardLayout from '../components/DashboardLayout';
@@ -46,9 +46,9 @@ const ProjectPage = () => {
       fetchProject(id);
       fetchApiKeys();
     }
-  }, [id, user]);
+  }, [id, fetchProject, fetchApiKeys]);
 
-  const fetchProject = async (projectId: string) => {
+  const fetchProject = useCallback(async (projectId: string) => {
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -79,9 +79,9 @@ const ProjectPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase, navigate]);
 
-  const fetchApiKeys = async () => {
+  const fetchApiKeys = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('api_keys')
@@ -100,9 +100,9 @@ const ProjectPage = () => {
     } catch (error: any) {
       console.error('Error fetching API keys:', error.message);
     }
-  };
+  }, [supabase, user?.id]);
 
-  const saveProject = async () => {
+  const saveProject = useCallback(async () => {
     if (!project) return;
 
     try {
@@ -126,9 +126,9 @@ const ProjectPage = () => {
     } finally {
       setSaving(false);
     }
-  };
+  }, [project, files, supabase]);
 
-  const generateCode = async () => {
+  const generateCode = useCallback(async () => {
     if (!prompt.trim() || !selectedApiKeyId) {
       toast.error('Please enter a prompt and select an API key');
       return;
@@ -137,11 +137,14 @@ const ProjectPage = () => {
     try {
       setGenerating(true);
       
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token || '';
+      
       const response = await fetch(`https://qxuxrwhmcwhjwbwrdrsn.supabase.co/functions/v1/8b9c3afe-28c3-4c21-bfb0-eab4af2c46d0`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token || ''}`
+          'Authorization': `Bearer ${accessToken}`
         },
         body: JSON.stringify({
           prompt,
@@ -181,13 +184,15 @@ const ProjectPage = () => {
     } finally {
       setGenerating(false);
     }
-  };
+  }, [prompt, selectedApiKeyId, supabase, saveProject]);
 
-  const updateFileContent = (path: string, newContent: string) => {
-    setFiles(files.map(file => 
-      file.path === path ? { ...file, content: newContent } : file
-    ));
-  };
+  const updateFileContent = useCallback((path: string, newContent: string) => {
+    setFiles(prevFiles => 
+      prevFiles.map(file => 
+        file.path === path ? { ...file, content: newContent } : file
+      )
+    );
+  }, []);
 
   const downloadProject = async () => {
     if (!files.length) {
@@ -333,7 +338,7 @@ const ProjectPage = () => {
             <Button 
               className="w-full" 
               onClick={generateCode} 
-              disabled={generating || !selectedApiKeyId}
+              disabled={generating || !selectedApiKeyId || !prompt.trim()}
             >
               {generating ? (
                 <>

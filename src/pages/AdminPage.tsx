@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import DashboardLayout from '../components/DashboardLayout';
 import { Button } from '../components/ui/button';
@@ -46,9 +46,9 @@ const AdminPage = () => {
   useEffect(() => {
     fetchApiKeys();
     fetchUsers();
-  }, []);
+  }, [fetchApiKeys, fetchUsers]);
 
-  const fetchApiKeys = async () => {
+  const fetchApiKeys = useCallback(async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -74,9 +74,9 @@ const AdminPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase]);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -95,9 +95,9 @@ const AdminPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase]);
 
-  const addApiKey = async () => {
+  const addApiKey = useCallback(async () => {
     if (!newKeyName.trim() || !newKeyValue.trim()) {
       toast.error('Name and API key are required');
       return;
@@ -141,9 +141,9 @@ const AdminPage = () => {
     } finally {
       setIsAddingKey(false);
     }
-  };
+  }, [newKeyName, newKeyValue, newKeyProvider, supabase, fetchApiKeys]);
 
-  const toggleKeyStatus = async (keyId: string, currentStatus: boolean) => {
+  const toggleKeyStatus = useCallback(async (keyId: string, currentStatus: boolean) => {
     try {
       const { error } = await supabase
         .from('api_keys')
@@ -160,9 +160,9 @@ const AdminPage = () => {
       toast.error('Failed to update API key status');
       console.error('Error updating API key status:', error.message);
     }
-  };
+  }, [supabase, fetchApiKeys]);
 
-  const deleteApiKey = async (keyId: string) => {
+  const deleteApiKey = useCallback(async (keyId: string) => {
     if (!confirm('Are you sure you want to delete this API key? This action cannot be undone.')) {
       return;
     }
@@ -183,9 +183,9 @@ const AdminPage = () => {
       toast.error('Failed to delete API key');
       console.error('Error deleting API key:', error.message);
     }
-  };
+  }, [supabase, fetchApiKeys]);
 
-  const toggleUserRole = async (userId: string, currentRole: string) => {
+  const toggleUserRole = useCallback(async (userId: string, currentRole: string) => {
     const newRole = currentRole === 'admin' ? 'user' : 'admin';
     
     if (!confirm(`Are you sure you want to change this user's role to ${newRole}?`)) {
@@ -208,14 +208,14 @@ const AdminPage = () => {
       toast.error('Failed to update user role');
       console.error('Error updating user role:', error.message);
     }
-  };
+  }, [supabase, fetchUsers]);
 
-  const toggleKeyVisibility = (keyId: string) => {
+  const toggleKeyVisibility = useCallback((keyId: string) => {
     setShowKeys(prev => ({
       ...prev,
       [keyId]: !prev[keyId]
     }));
-  };
+  }, []);
 
   return (
     <DashboardLayout>

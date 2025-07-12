@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
 import { File, Folder } from 'lucide-react';
@@ -18,7 +18,7 @@ interface CodeEditorProps {
 }
 
 const CodeEditor = ({ files, activeFile, setActiveFile, updateFileContent }: CodeEditorProps) => {
-  const getFileIcon = (path: string) => {
+  const getFileIcon = useCallback((path: string) => {
     const extension = path.split('.').pop()?.toLowerCase();
     
     switch (extension) {
@@ -39,9 +39,9 @@ const CodeEditor = ({ files, activeFile, setActiveFile, updateFileContent }: Cod
       default:
         return <File className="h-4 w-4 text-gray-400" />;
     }
-  };
+  }, []);
 
-  const getLanguage = (path: string) => {
+  const getLanguage = useCallback((path: string) => {
     const extension = path.split('.').pop()?.toLowerCase();
     
     switch (extension) {
@@ -66,16 +66,16 @@ const CodeEditor = ({ files, activeFile, setActiveFile, updateFileContent }: Cod
       default:
         return 'plaintext';
     }
-  };
+  }, []);
 
-  const handleContentChange = (value: string | undefined) => {
+  const handleContentChange = useCallback((value: string | undefined) => {
     if (activeFile && value !== undefined) {
       updateFileContent(activeFile, value);
     }
-  };
+  }, [activeFile, updateFileContent]);
 
   // Group files by directory
-  const groupFilesByDirectory = () => {
+  const fileGroups = useMemo(() => {
     const groups: Record<string, CodeFile[]> = {};
     
     files.forEach(file => {
@@ -90,9 +90,21 @@ const CodeEditor = ({ files, activeFile, setActiveFile, updateFileContent }: Cod
     });
     
     return groups;
-  };
+  }, [files]);
 
-  const fileGroups = groupFilesByDirectory();
+  // Memoize the active file content
+  const activeFileContent = useMemo(() => {
+    return files.find(f => f.path === activeFile)?.content || '';
+  }, [files, activeFile]);
+
+  // Memoize editor options
+  const editorOptions = useMemo(() => ({
+    minimap: { enabled: false },
+    fontSize: 14,
+    wordWrap: 'on',
+    scrollBeyondLastLine: false,
+    automaticLayout: true,
+  }), []);
 
   return (
     <div className="flex h-[500px] border rounded-md overflow-hidden">
@@ -148,15 +160,10 @@ const CodeEditor = ({ files, activeFile, setActiveFile, updateFileContent }: Cod
               <Editor
                 height="100%"
                 language={getLanguage(activeFile)}
-                value={files.find(f => f.path === activeFile)?.content || ''}
+                value={activeFileContent}
                 onChange={handleContentChange}
-                options={{
-                  minimap: { enabled: false },
-                  fontSize: 14,
-                  wordWrap: 'on',
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                }}
+                options={editorOptions}
+                loading={<div className="flex items-center justify-center h-full">Loading editor...</div>}
               />
             </div>
           </>
@@ -169,5 +176,7 @@ const CodeEditor = ({ files, activeFile, setActiveFile, updateFileContent }: Cod
     </div>
   );
 };
+
+export default CodeEditor;
 
 export default CodeEditor;

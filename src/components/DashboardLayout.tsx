@@ -1,5 +1,5 @@
 
-import { ReactNode } from 'react';
+import { ReactNode, useCallback, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from './ui/button';
@@ -29,14 +29,37 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const handleSignOut = async () => {
+  const handleSignOut = useCallback(async () => {
     await signOut();
     navigate('/');
-  };
+  }, [signOut, navigate]);
 
-  const isActive = (path: string) => {
+  const isActive = useCallback((path: string) => {
     return location.pathname === path;
-  };
+  }, [location.pathname]);
+
+  // Memoize navigation items to prevent unnecessary re-renders
+  const navigationItems = useMemo(() => [
+    {
+      path: '/dashboard',
+      label: 'Dashboard',
+      icon: <LayoutDashboard className="mr-3 h-5 w-5" />,
+      showAlways: true
+    },
+    {
+      path: '/admin',
+      label: 'Admin Panel',
+      icon: <ShieldCheck className="mr-3 h-5 w-5" />,
+      showAlways: false,
+      adminOnly: true
+    },
+    {
+      path: '/settings',
+      label: 'Settings',
+      icon: <Settings className="mr-3 h-5 w-5" />,
+      showAlways: true
+    }
+  ], []);
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -47,41 +70,22 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         </div>
         <div className="p-4">
           <nav className="space-y-1">
-            <Link
-              to="/dashboard"
-              className={`flex items-center px-4 py-2 text-sm rounded-md ${
-                isActive('/dashboard')
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <LayoutDashboard className="mr-3 h-5 w-5" />
-              Dashboard
-            </Link>
-            {isAdmin && (
-              <Link
-                to="/admin"
-                className={`flex items-center px-4 py-2 text-sm rounded-md ${
-                  isActive('/admin')
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <ShieldCheck className="mr-3 h-5 w-5" />
-                Admin Panel
-              </Link>
-            )}
-            <Link
-              to="/settings"
-              className={`flex items-center px-4 py-2 text-sm rounded-md ${
-                isActive('/settings')
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <Settings className="mr-3 h-5 w-5" />
-              Settings
-            </Link>
+            {navigationItems.map(item => (
+              (item.showAlways || (item.adminOnly && isAdmin)) && (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`flex items-center px-4 py-2 text-sm rounded-md ${
+                    isActive(item.path)
+                      ? 'bg-blue-50 text-blue-700'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  {item.icon}
+                  {item.label}
+                </Link>
+              )
+            ))}
           </nav>
         </div>
       </div>
@@ -104,26 +108,16 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link to="/dashboard" className="flex items-center cursor-pointer">
-                    <LayoutDashboard className="mr-2 h-4 w-4" />
-                    Dashboard
-                  </Link>
-                </DropdownMenuItem>
-                {isAdmin && (
-                  <DropdownMenuItem asChild>
-                    <Link to="/admin" className="flex items-center cursor-pointer">
-                      <ShieldCheck className="mr-2 h-4 w-4" />
-                      Admin Panel
-                    </Link>
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem asChild>
-                  <Link to="/settings" className="flex items-center cursor-pointer">
-                    <Settings className="mr-2 h-4 w-4" />
-                    Settings
-                  </Link>
-                </DropdownMenuItem>
+                {navigationItems.map(item => (
+                  (item.showAlways || (item.adminOnly && isAdmin)) && (
+                    <DropdownMenuItem key={item.path} asChild>
+                      <Link to={item.path} className="flex items-center cursor-pointer">
+                        {item.icon}
+                        {item.label}
+                      </Link>
+                    </DropdownMenuItem>
+                  )
+                ))}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut} className="flex items-center cursor-pointer">
                   <LogOut className="mr-2 h-4 w-4" />

@@ -1,7 +1,6 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Button } from './ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { RefreshCw } from 'lucide-react';
 
 interface CodeFile {
@@ -17,19 +16,19 @@ const CodePreview = ({ files }: CodePreviewProps) => {
   const [html, setHtml] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
 
-  useEffect(() => {
-    generatePreviewHtml();
-  }, [files, refreshKey]);
+  // Memoize the HTML, CSS, and JS files
+  const { htmlFile, cssFiles, jsFiles } = useMemo(() => {
+    return {
+      htmlFile: files.find(file => file.path.endsWith('.html')),
+      cssFiles: files.filter(file => file.path.endsWith('.css')),
+      jsFiles: files.filter(file => 
+        file.path.endsWith('.js') && !file.path.includes('node_modules')
+      )
+    };
+  }, [files]);
 
-  const generatePreviewHtml = () => {
-    // Find HTML, CSS, and JS files
-    const htmlFile = files.find(file => file.path.endsWith('.html'));
-    const cssFiles = files.filter(file => file.path.endsWith('.css'));
-    const jsFiles = files.filter(file => 
-      file.path.endsWith('.js') && !file.path.includes('node_modules')
-    );
-
-    // If no HTML file is found, try to create one from React components
+  const generatePreviewHtml = useCallback(() => {
+    // If no HTML file is found, create one from React components
     let htmlContent = htmlFile?.content || `
       <!DOCTYPE html>
       <html>
@@ -57,11 +56,15 @@ const CodePreview = ({ files }: CodePreviewProps) => {
       `<script id="preview-scripts">${jsContent}</script>`);
 
     setHtml(htmlContent);
-  };
+  }, [htmlFile, cssFiles, jsFiles]);
 
-  const refreshPreview = () => {
+  useEffect(() => {
+    generatePreviewHtml();
+  }, [files, refreshKey, generatePreviewHtml]);
+
+  const refreshPreview = useCallback(() => {
     setRefreshKey(prev => prev + 1);
-  };
+  }, []);
 
   return (
     <div className="flex flex-col h-[500px]">

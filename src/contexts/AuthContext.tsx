@@ -1,5 +1,5 @@
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
@@ -23,6 +23,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, name: string) => Promise<void>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -32,47 +33,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  useEffect(() => {
-    // Check for active session on mount
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session?.user) {
-        await fetchUserData(session.user);
-      }
-      
-      setLoading(false);
-    };
-
-    checkSession();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (session?.user) {
-          await fetchUserData(session.user);
-        } else {
-          setUser(null);
-          setIsAdmin(false);
-        }
-        setLoading(false);
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+  // Memoize the supabase client to prevent unnecessary re-renders
+  const supabaseClient = useMemo(() => supabase, []);
 
   const fetchUserData = async (authUser: User) => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from('profiles')
         .select('*')
         .eq('id', authUser.id)
         .single();
 
       if (error) {
+        console.error('Error fetching profile:', error.message);
+        // If profile doesn't exist, create one
+        if (error.code === 'PGRST116') {
+          await createUserProfile(authUser);
+          return;
+        }
         throw error;
       }
 
@@ -92,10 +70,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const createUserProfile = async (authUser: User) => {
+    try {
+      const { error } = await supabaseClient
+        .from('profiles')
+        .insert([
+          {
+            id: authUser.id,
+            name: authUser.user_metadata.name || authUser.email?.split('@')[0] || 'User',
+            role: 'user'
+          }
+        ]);
+
+      if (error) throw error;
+
+      // Fetch the profile again after creating it
+      await fetchUserData(authUser);
+    } catch (error) {
+      console.error('Error creating user profile:', error);
+    }
+  };
+
+  const refreshUser = async () => {
+    const { data } = await supabaseClient.auth.getUser();
+    if (data.user) {
+      await fetchUserData(data.user);
+    }
+  };
+
+  useEffect(() => {
+    // Check for active session on mount
+    const checkSession = async () => {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      
+      if (session?.user) {
+        await fetchUserData(session.user);
+      }
+      
+      setLoading(false);
+    };
+
+    checkSession();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session?.user) {
+          await fetchUserData(session.user);
+        } else {
+          setUser(null);
+          setIsAdmin(false);
+        }
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   const signIn = async (email: string, password: string) => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
         email,
         password,
       });
@@ -118,7 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       
       // Create auth user with metadata
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const { data: authData, error: authError } = await supabaseClient.auth.signUp({
         email,
         password,
         options: {
@@ -145,7 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     try {
       setLoading(true);
-      await supabase.auth.signOut();
+      await supabaseClient.auth.signOut();
       toast.success('Signed out successfully');
     } catch (error: any) {
       toast.error(error.message || 'Error signing out');
@@ -156,15 +194,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = {
     user,
-    supabase,
+    supabase: supabaseClient,
     loading,
     signIn,
     signUp,
     signOut,
-    isAdmin
+    isAdmin,
+    refreshUser
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
 }
 
 export function useAuth() {

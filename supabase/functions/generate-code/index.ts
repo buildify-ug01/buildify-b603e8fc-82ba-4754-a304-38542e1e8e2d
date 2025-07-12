@@ -13,6 +13,10 @@ interface RequestBody {
   apiKeyId: string;
 }
 
+// Cache for API keys to reduce database queries
+const apiKeyCache = new Map<string, { key: string; provider: string; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -23,18 +27,22 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
+      throw new Error("Missing Supabase environment variables");
+    }
+    
+    const supabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
 
     // Get the request body
     const body: RequestBody = await req.json();
     const { prompt, apiKeyId } = body;
 
-    if (!prompt || !apiKeyId) {
+    if (!prompt || !prompt.trim()) {
       return new Response(
-        JSON.stringify({ error: "Prompt and API key ID are required" }),
+        JSON.stringify({ error: "Prompt is required" }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 400,
@@ -42,22 +50,50 @@ serve(async (req) => {
       );
     }
 
-    // Get the API key from the database
-    const { data: apiKeyData, error: apiKeyError } = await supabaseClient
-      .from("api_keys")
-      .select("key, provider")
-      .eq("id", apiKeyId)
-      .eq("is_active", true)
-      .single();
-
-    if (apiKeyError || !apiKeyData) {
+    if (!apiKeyId) {
       return new Response(
-        JSON.stringify({ error: "Invalid or inactive API key" }),
+        JSON.stringify({ error: "API key ID is required" }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 400,
         }
       );
+    }
+
+    // Check if API key is in cache and not expired
+    let apiKeyData;
+    const now = Date.now();
+    const cachedApiKey = apiKeyCache.get(apiKeyId);
+    
+    if (cachedApiKey && (now - cachedApiKey.timestamp) < CACHE_TTL) {
+      apiKeyData = { key: cachedApiKey.key, provider: cachedApiKey.provider };
+    } else {
+      // Get the API key from the database
+      const { data, error } = await supabaseClient
+        .from("api_keys")
+        .select("key, provider")
+        .eq("id", apiKeyId)
+        .eq("is_active", true)
+        .single();
+
+      if (error || !data) {
+        return new Response(
+          JSON.stringify({ error: "Invalid or inactive API key" }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 400,
+          }
+        );
+      }
+
+      apiKeyData = data;
+      
+      // Update the cache
+      apiKeyCache.set(apiKeyId, { 
+        key: data.key, 
+        provider: data.provider,
+        timestamp: now
+      });
     }
 
     // Use the Gemini API to generate code
@@ -97,11 +133,29 @@ serve(async (req) => {
       }),
     });
 
+    if (!geminiResponse.ok) {
+      const geminiData = await geminiResponse.json();
+      return new Response(
+        JSON.stringify({ 
+          error: "Error from Gemini API", 
+          details: geminiData,
+          status: geminiResponse.status
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 500,
+        }
+      );
+    }
+
     const geminiData = await geminiResponse.json();
     
-    if (!geminiResponse.ok) {
+    if (!geminiData.candidates || !geminiData.candidates[0]?.content?.parts?.[0]?.text) {
       return new Response(
-        JSON.stringify({ error: "Error from Gemini API", details: geminiData }),
+        JSON.stringify({ 
+          error: "Invalid response from Gemini API",
+          details: geminiData
+        }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 500,
@@ -119,6 +173,11 @@ serve(async (req) => {
       const jsonMatch = generatedText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         parsedCode = JSON.parse(jsonMatch[0]);
+        
+        // Validate the structure
+        if (!parsedCode.files || !Array.isArray(parsedCode.files)) {
+          throw new Error("Invalid response structure");
+        }
       } else {
         throw new Error("No JSON found in response");
       }
@@ -127,7 +186,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           rawResponse: generatedText,
-          error: "Failed to parse generated code as JSON"
+          error: "Failed to parse generated code as JSON: " + error.message
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -144,8 +203,9 @@ serve(async (req) => {
       }
     );
   } catch (error) {
+    console.error("Function error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error.message || "An unexpected error occurred" }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 500,
