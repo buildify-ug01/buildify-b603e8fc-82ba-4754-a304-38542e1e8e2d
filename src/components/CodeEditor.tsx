@@ -178,5 +178,3 @@ const CodeEditor = ({ files, activeFile, setActiveFile, updateFileContent }: Cod
 };
 
 export default CodeEditor;
-
-export default CodeEditor;
